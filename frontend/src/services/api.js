@@ -51,3 +51,33 @@ export const getAnalyticsMetrics = async () => {
     throw error;
   }
 };
+
+export const getAlerts = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/alerts`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching alerts:', error);
+    throw error;
+  }
+};
+
+export const getReport = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/report`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching report:', error);
+    throw error;
+  }
+};
+
+export const getIntraday = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/intraday`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching intraday predictions:', error);
+    throw error;
+  }
+};

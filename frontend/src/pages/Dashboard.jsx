@@ -25,6 +25,7 @@ function Dashboard() {
   const [error, setError] = React.useState(null);
 
   const [historyData, setHistoryData] = React.useState([]);
+  const [chartData, setChartData] = React.useState(dashboardData.chartData);
 
   const fetchLatestPrediction = React.useCallback(() => {
     setIsLoading(true);
@@ -33,6 +34,17 @@ function Dashboard() {
         setLiveData(data);
         if (data.lastUpdated) {
           window.lastUpdatedValue = data.lastUpdated;
+        }
+        
+        if (data.currentPrice) {
+          setChartData(prev => {
+            const newData = [...prev];
+            const now = new Date();
+            const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+            newData.push({ date: timeStr, close: data.currentPrice });
+            if (newData.length > 20) newData.shift();
+            return newData;
+          });
         }
         setError(null);
       })
@@ -55,8 +67,8 @@ function Dashboard() {
     // Set up click triggers on window helper to let browser subagents or users test dynamics easily
     window.triggerLiveReload = fetchLatestPrediction;
     
-    // Auto Refresh Every 60 Seconds
-    const interval = setInterval(fetchLatestPrediction, 60000);
+    // Auto Refresh Every 2 Seconds for Real Time updates
+    const interval = setInterval(fetchLatestPrediction, 2000);
     return () => {
       clearInterval(interval);
       delete window.triggerLiveReload;
@@ -127,8 +139,8 @@ function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="flex flex-col justify-between h-[92px] p-4">
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">NIFTY 50</span>
-          <span className="text-xl font-extrabold text-[#F8FAFC] tracking-tight mt-1">{dashboardData.niftyValue}</span>
-          <span className="text-[10px] font-bold text-[#00b060] mt-0.5">{dashboardData.niftyChange}</span>
+          <span className="text-xl font-extrabold text-[#F8FAFC] tracking-tight mt-1">{liveData?.currentPrice ? liveData.currentPrice.toLocaleString('en-IN') : dashboardData.niftyValue}</span>
+          <span className={`text-[10px] font-bold mt-0.5 ${liveData?.expectedMove?.includes('-') ? 'text-[#ff3b30]' : 'text-[#00b060]'}`}>{liveData?.expectedMove || dashboardData.niftyChange}</span>
           <span className="text-[8px] text-[#64748B] mt-0.5">{liveData?.lastUpdated || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
         </Card>
 
@@ -193,7 +205,7 @@ function Dashboard() {
           
           <div className="h-56 mt-2 relative">
             < ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dashboardData.chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#00b060" stopOpacity={0.2}/>
@@ -219,8 +231,8 @@ function Dashboard() {
             </ResponsiveContainer>
             
             {/* Visual highlight tag inside the chart */}
-            <div className="absolute top-[48px] right-[10px] bg-[#00b060] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-[#00b060]/20">
-              24,502.15
+            <div className={`absolute top-[48px] right-[10px] ${liveData?.expectedMove?.includes('-') ? 'bg-[#ff3b30]' : 'bg-[#00b060]'} text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-[#00b060]/20`}>
+              {liveData?.currentPrice ? liveData.currentPrice.toLocaleString('en-IN') : '24,502.15'}
             </div>
           </div>
         </Card>
