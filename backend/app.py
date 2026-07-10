@@ -13,6 +13,7 @@ import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import datetime
+import random
 import yfinance as yf
 
 # ============================================================
@@ -391,6 +392,8 @@ def get_prediction():
     if feat is None:
         return jsonify({"error": "Feature pipeline unavailable"}), 500
 
+    preds, _ = run_inference(feat)
+
     # Use raw model probabilities — no artificial jitter; the live feature vector already
     # captures today's real market state, making each call genuinely dynamic
     lr_prob = int(preds["lr_prob"])
@@ -710,8 +713,9 @@ def get_predictions_detailed():
 
     preds, _   = run_inference(feat)
     votes_up   = preds["lr_pred"] + preds["rf_pred"] + preds["gb_pred"]
+    # Use majority vote for direction (consistent with /api/prediction)
+    direction  = "UP" if votes_up >= 2 else "DOWN"
     final_prob = int((preds["lr_prob"] + preds["rf_prob"] + preds["gb_prob"]) / 3)
-    direction  = "UP" if final_prob >= 50 else "DOWN"
     consensus  = {3: "Strong Bullish", 2: "Bullish Bias", 1: "Bearish Bias", 0: "Strong Bearish"}[votes_up]
 
     return jsonify({
@@ -1107,48 +1111,57 @@ def get_alerts():
 
 @app.route('/api/report', methods=['GET'])
 def get_report():
-    today = datetime.date.today()
-    dates = [(today - datetime.timedelta(days=i)).strftime("%d %b %Y") for i in range(7)]
-    predictions = [random.choice(["UP", "DOWN"]) for _ in range(7)]
-    actuals = [random.choice(["UP", "DOWN"]) for _ in range(7)]
-    correct = sum(1 for p, a in zip(predictions, actuals) if p == a)
-    accuracy = round((correct / 7) * 100, 1)
+    today       = datetime.date.today()
+    # Use real stored prediction history instead of random choices
+    history     = load_json_file(HISTORY_FILE, [])
+    # Take up to last 7 entries
+    recent      = history[:7]
+    dates       = [e["date"] for e in recent]
+    predictions = [e["prediction"] for e in recent]
+    actuals     = [e.get("actual") or "—" for e in recent]
+    # Count correct only where actual is known (not '—' or None)
+    correct     = sum(1 for p, a in zip(predictions, actuals) if a not in ("—", None) and
+                      ((p == "UP" and a == "▲") or (p == "DOWN" and a == "▼")))
+    known       = sum(1 for a in actuals if a not in ("—", None))
+    accuracy    = round((correct / known) * 100, 1) if known > 0 else 0.0
 
+    # Analytics from real model test-set metrics
     analytics_data = {
-        "logisticRegression": round(54.12 + random.uniform(-1, 1), 2),
-        "randomForest": round(48.45 + random.uniform(-1, 1), 2),
-        "gradientBoosting": round(54.25 + random.uniform(-1, 1), 2)
+        "logisticRegression": 54.12,
+        "randomForest": 48.45,
+        "gradientBoosting": 54.25
     }
-    best_model = max(analytics_data, key=analytics_data.get)
+    best_model    = max(analytics_data, key=analytics_data.get)
     best_accuracy = analytics_data[best_model]
 
     weekly_log = [
         {"date": dates[i], "prediction": predictions[i], "actual": actuals[i],
-         "correct": predictions[i] == actuals[i]}
-        for i in range(7)
+         "correct": (actuals[i] not in ("—", None) and
+                     ((predictions[i] == "UP" and actuals[i] == "▲") or
+                      (predictions[i] == "DOWN" and actuals[i] == "▼")))}
+        for i in range(len(recent))
     ]
 
     return jsonify({
         "generatedAt": datetime.datetime.now().strftime("%d %b %Y, %I:%M %p"),
-        "period": f"{dates[-1]} — {dates[0]}",
+        "period": f"{dates[-1] if dates else '—'} — {dates[0] if dates else '—'}",
         "weeklyAccuracy": accuracy,
         "correctPredictions": correct,
-        "totalPredictions": 7,
+        "totalPredictions": known,
         "bestModel": best_model,
         "bestModelAccuracy": best_accuracy,
         "modelAccuracy": analytics_data,
         "weeklyLog": weekly_log,
-        "summary": f"Over the past 7 trading days, the AI engine achieved {accuracy}% prediction accuracy. "
-                   f"The best performing model was {best_model.replace('gradientBoosting','Gradient Boosting').replace('randomForest','Random Forest').replace('logisticRegression','Logistic Regression')} "
-                   f"with {best_accuracy}% test accuracy. The majority vote ensemble correctly predicted "
-                   f"{correct} out of 7 sessions."
+        "summary": f"Over the past {len(recent)} stored sessions, the AI engine verified {correct} correct predictions out of {known} known outcomes ({accuracy}%). "
+                   f"Best performing model on the test set: Gradient Boosting at 54.25% accuracy. "
+                   f"Ensemble majority vote was used for all predictions."
     })
 
 
 @app.route('/api/intraday', methods=['GET'])
 def get_intraday():
     """Returns hour-by-hour NIFTY 50 predictions for the full trading day (9:15 AM - 3:30 PM)."""
-    feat = get_latest_features()
+    feat, _ = get_features()
     today = datetime.date.today()
     now = datetime.datetime.now()
 
@@ -1161,16 +1174,14 @@ def get_intraday():
 
     base_price = 24502.15
 
-    # Get ML base probabilities
+    # Get ML base probabilities using the standard inference helper
     base_lr_prob = base_rf_prob = base_gb_prob = 50
-    if feat is not None and models and scaler:
+    if feat is not None:
         try:
-            feature_cols = [c for c in feat.index if c not in ['Date', 'Target', 'Future_Close']]
-            x_input = np.array([feat[feature_cols].values])
-            x_scaled = scaler.transform(x_input)
-            base_lr_prob = int(models['lr'].predict_proba(x_scaled)[0][1] * 100)
-            base_rf_prob = int(models['rf'].predict_proba(x_scaled)[0][1] * 100)
-            base_gb_prob = int(models['gb'].predict_proba(x_scaled)[0][1] * 100)
+            preds_intra, _ = run_inference(feat)
+            base_lr_prob = int(preds_intra["lr_prob"])
+            base_rf_prob = int(preds_intra["rf_prob"])
+            base_gb_prob = int(preds_intra["gb_prob"])
         except Exception:
             pass
 
