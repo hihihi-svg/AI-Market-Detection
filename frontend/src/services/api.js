@@ -310,4 +310,3 @@ export const compareStocks = async (symbols) => {
   }
 };
 
->>>>>>> Stashed changes
