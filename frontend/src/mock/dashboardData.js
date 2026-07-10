@@ -1,79 +1,97 @@
-// Static mock dataset matching NIFTY feature pipeline outputs
+// Dynamic dashboard data — generates current dates and values at runtime
+// This replaces the old static May 2025 mock data
+
+const today = new Date();
+
+function formatDate(d) {
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function daysAgo(n) {
+  const d = new Date(today);
+  d.setDate(d.getDate() - n);
+  return d;
+}
+
+function formatShortDate(d) {
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
 export const dashboardData = {
-  niftyValue: '24,502.15',
-  niftyChange: '+110.45 (0.45%)',
-  niftyChangeValue: '+110.45',
-  niftyChangePercent: '0.45%',
-  lastUpdated: '12 May 2025, 03:30 PM',
+  // These fields are overridden by live API data; kept as loading fallback only
+  niftyValue: '—',
+  niftyChange: '—',
+  niftyChangeValue: '—',
+  niftyChangePercent: '—',
+  lastUpdated: formatDate(today) + ', loading...',
   prediction: 'UP',
   probability: 68,
   confidence: 68,
   expectedMove: '+0.62%',
-  predictionDate: '13 May 2025',
-  targetRange: '25,200 – 25,400',
+  predictionDate: formatDate(new Date(today.getTime() + 86400000)),
+  targetRange: '—',
   timeHorizon: '1 Day',
-  
+
+  // Ticker sparkline mini-charts — prices are illustrative shapes, not exact values
   tickers: [
-    { name: 'NIFTY 50', value: '24,502.15', change: '+134.25 (0.45%)', isUp: true, prices: [24380, 24410, 24450, 24430, 24490, 24502] },
-    { name: 'SENSEX', value: '80,319.48', change: '+337.86 (0.38%)', isUp: true, prices: [79900, 80050, 80150, 80100, 80250, 80319] },
-    { name: 'BANK NIFTY', value: '51,104.35', change: '+198.20 (0.62%)', isUp: true, prices: [50800, 50900, 51010, 50950, 51050, 51104] },
-    { name: 'INDIA VIX', value: '14.23', change: '-2.15%', isUp: false, prices: [14.8, 14.7, 14.5, 14.6, 14.3, 14.23] },
-    { name: 'USD/INR', value: '83.32', change: '+0.12%', isUp: true, prices: [83.22, 83.25, 83.30, 83.28, 83.31, 83.32] },
-    { name: 'GOLD', value: '72,385', change: '+0.28%', isUp: true, prices: [71900, 72050, 72150, 72100, 72250, 72385] },
-    { name: 'CRUDE OIL', value: '6,128', change: '-0.35%', isUp: false, prices: [6220, 6210, 6230, 6195, 6200, 6128] },
+    { name: 'NIFTY 50',   value: '—', change: '—', isUp: true,  prices: [23800, 23850, 23900, 23870, 23940, 23963] },
+    { name: 'SENSEX',     value: '—', change: '—', isUp: true,  prices: [79200, 79400, 79600, 79500, 79700, 79800] },
+    { name: 'BANK NIFTY', value: '—', change: '—', isUp: true,  prices: [51200, 51350, 51500, 51400, 51600, 51700] },
+    { name: 'INDIA VIX',  value: '—', change: '—', isUp: false, prices: [13.8, 13.5, 13.6, 13.4, 13.3, 13.36] },
+    { name: 'USD/INR',    value: '—', change: '—', isUp: true,  prices: [94.8, 94.9, 95.0, 95.1, 95.2, 95.25] },
+    { name: 'GOLD',       value: '—', change: '—', isUp: true,  prices: [4050, 4080, 4100, 4090, 4120, 4133] },
+    { name: 'CRUDE OIL',  value: '—', change: '—', isUp: false, prices: [74.5, 73.8, 73.2, 72.8, 72.5, 72.3] },
   ],
 
   reasons: [
-    'India VIX has dropped by 4.2%, signaling reduced market fear.',
-    'RSI (58.2) shows strong bullish momentum, not yet overbought.',
-    'Golden cross formed in moving averages (20DMA > 50DMA).',
-    'Crude oil prices are stable, reducing import cost uncertainty.',
-    '2 out of 3 machine learning models strongly agree on upward trend.'
+    'Fetching live AI analysis...'
   ],
 
   macroCards: [
-    { name: 'GOLD (MCX)', value: '₹72,385', change: '+0.28%', isUp: true, status: 'Stable', prices: [71900, 72050, 72150, 72250, 72385] },
-    { name: 'CRUDE OIL (WTI)', value: '$6,128', change: '-0.35%', isUp: false, status: 'Neutral', prices: [6220, 6210, 6230, 6200, 6128] },
-    { name: 'USD / INR', value: '₹83.32', change: '+0.12%', isUp: true, status: 'Slightly Weak', prices: [83.22, 83.25, 83.30, 83.31, 83.32] },
-    { name: 'INDIA VIX', value: '14.23', change: '-2.15%', isUp: false, status: 'Low Fear', prices: [14.8, 14.7, 14.5, 14.3, 14.23] }
+    { name: 'GOLD (MCX)',      value: '—', change: '—', isUp: true,  status: 'Loading...', prices: [4050, 4080, 4100, 4090, 4120, 4133] },
+    { name: 'CRUDE OIL (WTI)', value: '—', change: '—', isUp: false, status: 'Loading...', prices: [74.5, 73.8, 73.2, 72.8, 72.5, 72.3] },
+    { name: 'USD / INR',       value: '—', change: '—', isUp: true,  status: 'Loading...', prices: [94.8, 94.9, 95.0, 95.1, 95.2, 95.25] },
+    { name: 'INDIA VIX',       value: '—', change: '—', isUp: false, status: 'Loading...', prices: [13.8, 13.5, 13.6, 13.4, 13.3, 13.36] }
   ],
 
   features: [
-    { name: 'NIFTY Return (Lag 1)', weight: 0.18 },
-    { name: 'RSI (14)', weight: 0.15 },
-    { name: 'India VIX Change', weight: 0.12 },
-    { name: 'USD/INR Change', weight: 0.10 },
-    { name: 'Gold Return', weight: 0.09 }
+    { name: 'RSI (14)',              weight: 0.22 },
+    { name: 'NIFTY Return (Lag 1)',  weight: 0.18 },
+    { name: 'MACD Signal',           weight: 0.15 },
+    { name: 'India VIX Change',      weight: 0.14 },
+    { name: 'Price-MA20 Diff',       weight: 0.12 },
   ],
 
   models: [
-    { name: 'Gradient Boosting', prob: 68, color: '#22c55e' },
-    { name: 'Random Forest', prob: 61, color: '#a78bfa' },
-    { name: 'Logistic Regression', prob: 54, color: '#3b82f6' }
+    { name: 'Gradient Boosting',    prob: 68, color: '#22c55e' },
+    { name: 'Random Forest',        prob: 61, color: '#a78bfa' },
+    { name: 'Logistic Regression',  prob: 54, color: '#3b82f6' }
   ],
 
+  // History is generated with today's dates as placeholders; live data overrides these
   history: [
-    { date: '12 May 2025', prediction: 'UP', confidence: '68%', actual: '—' },
-    { date: '9 May 2025', prediction: 'UP', confidence: '63%', actual: '▲' },
-    { date: '8 May 2025', prediction: 'DOWN', confidence: '58%', actual: '▼' },
-    { date: '7 May 2025', prediction: 'UP', confidence: '61%', actual: '▲' },
-    { date: '6 May 2025', prediction: 'UP', confidence: '65%', actual: '▲' }
+    { date: formatDate(daysAgo(0)), prediction: '—', confidence: '—', actual: '—' },
+    { date: formatDate(daysAgo(1)), prediction: '—', confidence: '—', actual: '—' },
+    { date: formatDate(daysAgo(2)), prediction: '—', confidence: '—', actual: '—' },
+    { date: formatDate(daysAgo(3)), prediction: '—', confidence: '—', actual: '—' },
+    { date: formatDate(daysAgo(4)), prediction: '—', confidence: '—', actual: '—' },
   ],
 
+  // Chart data: last 6 trading day labels (dynamic) — prices are loaded from API
   chartData: [
-    { date: '14 Apr', close: 23200, volume: 400 },
-    { date: '18 Apr', close: 23500, volume: 550 },
-    { date: '24 Apr', close: 23000, volume: 600 },
-    { date: '30 Apr', close: 23800, volume: 480 },
-    { date: '6 May', close: 24200, volume: 500 },
-    { date: '12 May', close: 24502, volume: 700 }
+    { date: formatShortDate(daysAgo(10)), close: 23600, volume: 480 },
+    { date: formatShortDate(daysAgo(8)),  close: 23750, volume: 510 },
+    { date: formatShortDate(daysAgo(6)),  close: 23820, volume: 490 },
+    { date: formatShortDate(daysAgo(4)),  close: 23900, volume: 540 },
+    { date: formatShortDate(daysAgo(2)),  close: 23882, volume: 560 },
+    { date: formatShortDate(daysAgo(0)),  close: 23963, volume: 600 },
   ],
 
   performanceData: [
-    { name: 'Gradient Boosting', accuracy: 68 },
-    { name: 'Random Forest', accuracy: 61 },
-    { name: 'Logistic Regression', accuracy: 54 }
+    { name: 'Gradient Boosting',   accuracy: 54.25 },
+    { name: 'Random Forest',       accuracy: 48.45 },
+    { name: 'Logistic Regression', accuracy: 54.12 }
   ],
 
-  news: 'NIFTY ends higher as IT and banking stocks rally   •   India VIX drops 2% indicating lower market volatility   •   Global cues positive ahead of US inflation data'
+  news: 'Live market data loading...   •   AI prediction engine active   •   NIFTY 50 tracking in real-time'
 };

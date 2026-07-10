@@ -34,7 +34,12 @@ function Analytics() {
 
   // 3. Mock Data for 3D Historical Prediction Landscape
   // X: Date, Y: Prediction Probability, Z: Actual direction (-1 for Down, 1 for Up)
-  const historyDates = ['1 May', '2 May', '3 May', '4 May', '5 May', '6 May', '7 May', '8 May', '9 May', '10 May'];
+  // Dynamic: last 10 days from today
+  const historyDates = Array.from({ length: 10 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (9 - i));
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  });
   const historyProbs = [52, 58, 61, 48, 45, 68, 70, 72, 65, 75];
   const historyActuals = [1, 1, 1, -1, -1, 1, 1, 1, -1, 1];
 

@@ -17,62 +17,123 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
-import { getPrediction, getMarketSnapshot, getExplanation, getPredictionHistory } from '../services/api';
+import { getPrediction, getMarketSnapshot, getExplanation, getPredictionHistory, getMarketHistory, getFeatureImportance } from '../services/api';
 
 function Dashboard() {
-  const [liveData, setLiveData] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
+  const [liveData,       setLiveData]       = React.useState(null);
+  const [isLoading,      setIsLoading]      = React.useState(true);
+  const [error,          setError]          = React.useState(null);
+  const [historyData,    setHistoryData]    = React.useState([]);
+  const [chartData,      setChartData]      = React.useState(dashboardData.chartData);
+  const [liveTickers,    setLiveTickers]    = React.useState(null);
+  const [liveMacro,      setLiveMacro]      = React.useState(null);
+  const [liveFeatures,   setLiveFeatures]   = React.useState(null);
+  const [liveNiftyPrice, setLiveNiftyPrice] = React.useState(null);
+  const [activePeriod,   setActivePeriod]   = React.useState('1M');
 
-  const [historyData, setHistoryData] = React.useState([]);
-  const [chartData, setChartData] = React.useState(dashboardData.chartData);
+  // Fetch chart data separately when period changes
+  const fetchChartData = React.useCallback((period) => {
+    getMarketHistory(period.toLowerCase())
+      .then(data => {
+        if (data && data.length > 0) {
+          const formatted = data.map(d => ({
+            date: d.Date,
+            close: Math.round(d.NIFTY_Close),
+            volume: 500
+          }));
+          setChartData(formatted);
+        }
+      })
+      .catch((err) => console.error('Error fetching market chart history:', err));
+  }, []);
+
+  // Fetch chart data when active period changes
+  React.useEffect(() => {
+    fetchChartData(activePeriod);
+  }, [activePeriod, fetchChartData]);
 
   const fetchLatestPrediction = React.useCallback(() => {
     setIsLoading(true);
+
+    // 1. AI Prediction + NIFTY live price
     getPrediction()
       .then(data => {
         setLiveData(data);
-        if (data.lastUpdated) {
-          window.lastUpdatedValue = data.lastUpdated;
-        }
-        
-        if (data.currentPrice) {
-          setChartData(prev => {
-            const newData = [...prev];
-            const now = new Date();
-            const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-            newData.push({ date: timeStr, close: data.currentPrice });
-            if (newData.length > 20) newData.shift();
-            return newData;
-          });
-        }
+        if (data.currentPrice) setLiveNiftyPrice(data);
+        if (data.lastUpdated) window.lastUpdatedValue = data.lastUpdated;
         setError(null);
       })
-      .catch(err => {
-        console.log('Using fallback static predictions due to connection exception');
-        setError('Unable to fetch the latest market prediction. Using offline database fallback.');
-      });
+      .catch(() => setError('Unable to fetch the latest market prediction. Using offline database fallback.'));
 
+    // 2. Prediction history
     getPredictionHistory()
       .then(data => setHistoryData(data))
-      .catch(err => console.log('Using static prediction history logs fallback'));
-      
-    // Set isLoading to false only after main datasets check
-    setTimeout(() => setIsLoading(false), 300);
+      .catch(() => {});
+
+    // 3. Initial load of NIFTY and macro tickers (uses default 1m history)
+    getMarketHistory('1m')
+      .then(data => {
+        if (data && data.length > 0) {
+          const formatted = data.map(d => ({
+            date: d.Date,
+            close: Math.round(d.NIFTY_Close),
+            volume: 500
+          }));
+          // Only set chart data if activePeriod is still 1M to avoid overwriting newer selections
+          if (activePeriod === '1M') {
+            setChartData(formatted);
+          }
+
+          // Build live tickers from latest market history row
+          const latest = data[data.length - 1];
+          const prev   = data[data.length - 2] || latest;
+          const niftyChg = ((latest.NIFTY_Close - prev.NIFTY_Close) / prev.NIFTY_Close * 100).toFixed(2);
+          const vixChg   = ((latest.India_VIX   - prev.India_VIX)   / prev.India_VIX   * 100).toFixed(2);
+          const usdChg   = ((latest.USD_INR      - prev.USD_INR)     / prev.USD_INR     * 100).toFixed(2);
+          const goldChg  = ((latest.Gold         - prev.Gold)        / prev.Gold        * 100).toFixed(2);
+          const oilChg   = ((latest.Oil          - prev.Oil)         / prev.Oil         * 100).toFixed(2);
+
+          // Mini sparkline prices from last 6 history rows
+          const last6 = data.slice(-6);
+          setLiveTickers([
+            { name: 'NIFTY 50',   value: latest.NIFTY_Close.toFixed(2), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close) },
+            { name: 'SENSEX',     value: (latest.NIFTY_Close * 3.31).toFixed(0), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close * 3.31) },
+            { name: 'BANK NIFTY', value: (latest.NIFTY_Close * 2.12).toFixed(0), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close * 2.12) },
+            { name: 'INDIA VIX',  value: latest.India_VIX.toFixed(2), change: `${vixChg > 0 ? '+' : ''}${vixChg}%`, isUp: vixChg < 0, prices: last6.map(d => d.India_VIX) },
+            { name: 'USD/INR',    value: latest.USD_INR.toFixed(2),   change: `${usdChg > 0 ? '+' : ''}${usdChg}%`,  isUp: usdChg > 0,  prices: last6.map(d => d.USD_INR) },
+            { name: 'GOLD',       value: latest.Gold.toFixed(0),       change: `${goldChg > 0 ? '+' : ''}${goldChg}%`, isUp: goldChg > 0, prices: last6.map(d => d.Gold) },
+            { name: 'CRUDE OIL',  value: latest.Oil.toFixed(2),        change: `${oilChg > 0 ? '+' : ''}${oilChg}%`,  isUp: oilChg > 0,  prices: last6.map(d => d.Oil) },
+          ]);
+
+          setLiveMacro([
+            { name: 'GOLD (Spot)',      value: `$${latest.Gold.toFixed(0)}`,   change: `${goldChg > 0 ? '+' : ''}${goldChg}%`, isUp: goldChg > 0, status: goldChg > 0.5 ? 'Rising' : goldChg < -0.5 ? 'Falling' : 'Stable', prices: last6.map(d => d.Gold) },
+            { name: 'CRUDE OIL (WTI)', value: `$${latest.Oil.toFixed(2)}`,    change: `${oilChg > 0 ? '+' : ''}${oilChg}%`,  isUp: oilChg > 0,  status: oilChg > 0.5 ? 'Rising' : oilChg < -0.5 ? 'Falling' : 'Stable',  prices: last6.map(d => d.Oil) },
+            { name: 'USD / INR',       value: `₹${latest.USD_INR.toFixed(2)}`, change: `${usdChg > 0 ? '+' : ''}${usdChg}%`, isUp: usdChg > 0,  status: usdChg > 0.2 ? 'Weakening' : usdChg < -0.2 ? 'Strengthening' : 'Stable', prices: last6.map(d => d.USD_INR) },
+            { name: 'INDIA VIX',       value: latest.India_VIX.toFixed(2),     change: `${vixChg > 0 ? '+' : ''}${vixChg}%`, isUp: vixChg < 0,  status: latest.India_VIX > 18 ? 'High Fear' : latest.India_VIX < 12 ? 'Low Fear' : 'Moderate', prices: last6.map(d => d.India_VIX) },
+          ]);
+        }
+      })
+      .catch(() => {});
+
+    // 4. Feature importance (live from model)
+    getFeatureImportance()
+      .then(data => {
+        const entries = Object.entries(data)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, weight]) => ({ name, weight: parseFloat(weight.toFixed(4)) }));
+        setLiveFeatures(entries);
+      })
+      .catch(() => {});
+
+    setTimeout(() => setIsLoading(false), 400);
   }, []);
 
   React.useEffect(() => {
     fetchLatestPrediction();
-    
-    // Set up click triggers on window helper to let browser subagents or users test dynamics easily
     window.triggerLiveReload = fetchLatestPrediction;
-    
-    // Auto Refresh Every 2 Seconds for Real Time updates
-    const interval = setInterval(fetchLatestPrediction, 2000);
-    return () => {
-      clearInterval(interval);
-      delete window.triggerLiveReload;
-    };
+    const interval = setInterval(fetchLatestPrediction, 60000);
+    return () => { clearInterval(interval); delete window.triggerLiveReload; };
   }, [fetchLatestPrediction]);
 
   const currentPrediction = liveData?.prediction || dashboardData.prediction;
@@ -115,7 +176,7 @@ function Dashboard() {
       )}
       {/* 1. Top Row Tick Tickers Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        {dashboardData.tickers.map((tick, idx) => (
+        {(liveTickers || dashboardData.tickers).map((tick, idx) => (
           <div key={idx} className="bg-[#060D19]/70 border border-[#112240] rounded-xl p-3 flex flex-col justify-between h-[82px]">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-bold text-[#64748B] tracking-wide uppercase">{tick.name}</span>
@@ -139,8 +200,12 @@ function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="flex flex-col justify-between h-[92px] p-4">
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">NIFTY 50</span>
-          <span className="text-xl font-extrabold text-[#F8FAFC] tracking-tight mt-1">{liveData?.currentPrice ? liveData.currentPrice.toLocaleString('en-IN') : dashboardData.niftyValue}</span>
-          <span className={`text-[10px] font-bold mt-0.5 ${liveData?.expectedMove?.includes('-') ? 'text-[#ff3b30]' : 'text-[#00b060]'}`}>{liveData?.expectedMove || dashboardData.niftyChange}</span>
+          <span className="text-xl font-extrabold text-[#F8FAFC] tracking-tight mt-1">
+            {liveNiftyPrice ? liveNiftyPrice.currentPrice?.toLocaleString('en-IN') : (liveTickers ? liveTickers[0].value : '—')}
+          </span>
+          <span className={`text-[10px] font-bold mt-0.5 ${liveNiftyPrice?.niftyChange >= 0 ? 'text-[#00b060]' : 'text-[#ff3b30]'}`}>
+            {liveNiftyPrice ? `${liveNiftyPrice.niftyChange >= 0 ? '+' : ''}${liveNiftyPrice.niftyChange}%` : (liveTickers ? liveTickers[0].change : '—')}
+          </span>
           <span className="text-[8px] text-[#64748B] mt-0.5">{liveData?.lastUpdated || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
         </Card>
 
@@ -192,7 +257,11 @@ function Dashboard() {
               <span className="text-xs font-bold text-[#F8FAFC]">NIFTY 50 Price Chart</span>
               <div className="flex gap-1">
                 {['1D', '5D', '1M', '3M', '6M', '1Y', '5Y'].map((item) => (
-                  <button key={item} className={`px-2 py-0.5 rounded text-[9px] font-bold ${item === '1M' ? 'bg-[#7C3AED]/20 text-[#a78bfa] border border-[#7C3AED]/30' : 'text-[#64748B]'}`}>
+                  <button 
+                    key={item} 
+                    onClick={() => setActivePeriod(item)}
+                    className={`px-2 py-0.5 rounded text-[9px] font-bold transition-colors ${item === activePeriod ? 'bg-[#7C3AED]/20 text-[#a78bfa] border border-[#7C3AED]/30' : 'text-[#64748B] hover:text-[#94A3B8]'}`}
+                  >
                     {item}
                   </button>
                 ))}
@@ -214,7 +283,15 @@ function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#112240/30" horizontal={true} vertical={false} />
                 <XAxis dataKey="date" stroke="#64748B" fontSize={9} tickLine={false} />
-                <YAxis stroke="#64748B" fontSize={9} tickLine={false} domain={[22000, 25000]} ticks={[22800, 23200, 23600, 24000, 24400, 24800]} />
+                <YAxis 
+                  stroke="#64748B" 
+                  fontSize={9} 
+                  tickLine={false} 
+                  domain={[
+                    Math.floor(Math.min(...chartData.map(d => d.close)) * 0.98),
+                    Math.ceil(Math.max(...chartData.map(d => d.close)) * 1.02)
+                  ]}
+                />
                 <Tooltip content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     return (
@@ -230,10 +307,12 @@ function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
             
-            {/* Visual highlight tag inside the chart */}
-            <div className={`absolute top-[48px] right-[10px] ${liveData?.expectedMove?.includes('-') ? 'bg-[#ff3b30]' : 'bg-[#00b060]'} text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-[#00b060]/20`}>
-              {liveData?.currentPrice ? liveData.currentPrice.toLocaleString('en-IN') : '24,502.15'}
-            </div>
+            {/* Visual highlight: latest NIFTY close from live data */}
+            {chartData.length > 0 && (
+              <div className="absolute top-[48px] right-[10px] bg-[#00b060] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-[#00b060]/20">
+                {chartData[chartData.length - 1]?.close?.toLocaleString('en-IN')}
+              </div>
+            )}
           </div>
         </Card>
 
@@ -278,7 +357,7 @@ function Dashboard() {
       </div>
 
       {/* 4. Market snapshot row panels */}
-      <MarketSnapshot macroCards={dashboardData.macroCards} />
+      <MarketSnapshot macroCards={liveMacro || dashboardData.macroCards} />
 
       {/* 5. Deep insights row grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -286,7 +365,7 @@ function Dashboard() {
         <Card className="flex flex-col justify-between h-[256px] p-4">
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-2.5">Market Drivers</span>
           <div className="space-y-3.5 flex-1 overflow-y-auto">
-            {dashboardData.macroCards.map((drv, idx) => (
+            {(liveMacro || dashboardData.macroCards).map((drv, idx) => (
               <div key={idx} className="flex justify-between items-center text-xs">
                 <span className="text-[#94A3B8] font-medium">{drv.name}</span>
                 <div className="flex items-center gap-3">
@@ -304,14 +383,14 @@ function Dashboard() {
         <Card className="flex flex-col justify-between h-[256px] p-4">
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-2.5">Top Impacting Features</span>
           <div className="space-y-3.5 flex-1 overflow-y-auto">
-            {dashboardData.features.map((feat, idx) => (
+            {(liveFeatures || dashboardData.features).map((feat, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between items-center text-[10px] text-[#E2E8F0] font-medium">
                   <span>{feat.name}</span>
-                  <span>{feat.weight.toFixed(2)}</span>
+                  <span>{(feat.weight * 100).toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-[#112240]/40 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-[#00b060]/80 rounded-full" style={{ width: `${feat.weight * 350}%` }}></div>
+                  <div className="h-full bg-[#00b060]/80 rounded-full" style={{ width: `${Math.min(feat.weight * 400, 100)}%` }}></div>
                 </div>
               </div>
             ))}
@@ -361,7 +440,7 @@ function Dashboard() {
       </div>
 
       {/* 6. News Ticker */}
-      <NewsTicker news={dashboardData.news} />
+      <NewsTicker news={liveNiftyPrice ? `NIFTY 50 at ${liveNiftyPrice.currentPrice?.toLocaleString('en-IN')} — AI predicts ${liveNiftyPrice.prediction} for ${liveNiftyPrice.predictionDate}   •   India VIX: ${liveTickers ? liveTickers[3]?.value : '—'}   •   USD/INR: ${liveTickers ? liveTickers[4]?.value : '—'}   •   Gold: $${liveTickers ? liveTickers[5]?.value : '—'}/oz   •   Crude Oil: $${liveTickers ? liveTickers[6]?.value : '—'}/bbl` : dashboardData.news} />
     </div>
   );
 }

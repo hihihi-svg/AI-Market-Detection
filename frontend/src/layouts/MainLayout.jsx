@@ -10,7 +10,8 @@ import {
   FileText,
   RefreshCw,
   BarChart2,
-  Clock
+  Clock,
+  Search
 } from 'lucide-react';
 import { getPrediction, getMarketSnapshot } from '../services/api';
 import { dashboardData } from '../mock/dashboardData';
@@ -23,6 +24,7 @@ function MainLayout() {
     { name: 'AI Predictions',       path: '/history',   icon: <Sparkles size={16} /> },
     { name: 'Intraday Prediction',  path: '/intraday',  icon: <Clock size={16} /> },
     { name: 'Model Comparison',     path: '/analytics', icon: <History size={16} /> },
+    { name: 'Stock Search',         path: '/stocks',    icon: <Search size={16} /> },
     { name: 'Portfolio Watch',      path: '/watchlist', icon: <Eye size={16} /> },
     { name: 'Alerts',               path: '/alerts',    icon: <AlertCircle size={16} /> },
     { name: 'Reports',              path: '/reports',   icon: <FileText size={16} /> },
@@ -147,7 +149,7 @@ function MainLayout() {
             {/* USD/INR — DYNAMIC */}
             <div className="flex items-center gap-1.5 border-r border-[#112240]/40 pr-4 shrink-0">
               <span className="text-[10px] font-bold text-[#64748B] uppercase">USD/INR</span>
-              <span className="text-xs font-bold text-[#F8FAFC]">₹83.32</span>
+              <span className="text-xs font-bold text-[#F8FAFC]">₹95.44</span>
               {liveMarket?.usd && <span className={`text-[9px] font-bold ${statusColor(liveMarket.usd)}`}>{liveMarket.usd}</span>}
             </div>
 

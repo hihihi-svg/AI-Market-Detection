@@ -12,6 +12,7 @@ const PortfolioWatch = lazy(() => import('./pages/PortfolioWatch'));
 const Alerts = lazy(() => import('./pages/Alerts'));
 const Reports = lazy(() => import('./pages/Reports'));
 const IntradayPrediction = lazy(() => import('./pages/IntradayPrediction'));
+const StockSearch = lazy(() => import('./pages/StockSearch'));
 
 // Reusable spinner fallback for lazy page bundles
 function PageLoader() {
@@ -41,6 +42,10 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="about" element={<About />} />
+            <Route path="watchlist" element={<PortfolioWatch />} />
+            <Route path="alerts" element={<Alerts />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="stocks" element={<StockSearch />} />
           </Route>
         </Routes>
       </Suspense>
