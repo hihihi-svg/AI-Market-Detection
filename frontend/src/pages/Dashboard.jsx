@@ -87,18 +87,25 @@ function Dashboard() {
           // Build live tickers from latest market history row
           const latest = data[data.length - 1];
           const prev   = data[data.length - 2] || latest;
-          const niftyChg = ((latest.NIFTY_Close - prev.NIFTY_Close) / prev.NIFTY_Close * 100).toFixed(2);
-          const vixChg   = ((latest.India_VIX   - prev.India_VIX)   / prev.India_VIX   * 100).toFixed(2);
-          const usdChg   = ((latest.USD_INR      - prev.USD_INR)     / prev.USD_INR     * 100).toFixed(2);
-          const goldChg  = ((latest.Gold         - prev.Gold)        / prev.Gold        * 100).toFixed(2);
-          const oilChg   = ((latest.Oil          - prev.Oil)         / prev.Oil         * 100).toFixed(2);
+          const niftyChg   = ((latest.NIFTY_Close - prev.NIFTY_Close) / prev.NIFTY_Close * 100).toFixed(2);
+          const vixChg     = ((latest.India_VIX   - prev.India_VIX)   / prev.India_VIX   * 100).toFixed(2);
+          const usdChg     = ((latest.USD_INR      - prev.USD_INR)     / prev.USD_INR     * 100).toFixed(2);
+          const goldChg    = ((latest.Gold         - prev.Gold)        / prev.Gold        * 100).toFixed(2);
+          const oilChg     = ((latest.Oil          - prev.Oil)         / prev.Oil         * 100).toFixed(2);
+          // Real SENSEX and BANK NIFTY — live from backend (fallback to NIFTY ratio only if 0)
+          const sensexVal    = latest.SENSEX    > 0 ? latest.SENSEX    : latest.NIFTY_Close * 3.31;
+          const bankNiftyVal = latest.BANK_NIFTY > 0 ? latest.BANK_NIFTY : latest.NIFTY_Close * 2.12;
+          const prevSensex    = (prev.SENSEX    > 0 ? prev.SENSEX    : prev.NIFTY_Close * 3.31) || sensexVal;
+          const prevBankNifty = (prev.BANK_NIFTY > 0 ? prev.BANK_NIFTY : prev.NIFTY_Close * 2.12) || bankNiftyVal;
+          const sensexChg    = ((sensexVal - prevSensex) / prevSensex * 100).toFixed(2);
+          const bankNiftyChg = ((bankNiftyVal - prevBankNifty) / prevBankNifty * 100).toFixed(2);
 
           // Mini sparkline prices from last 6 history rows
           const last6 = data.slice(-6);
           setLiveTickers([
             { name: 'NIFTY 50',   value: latest.NIFTY_Close.toFixed(2), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close) },
-            { name: 'SENSEX',     value: (latest.NIFTY_Close * 3.31).toFixed(0), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close * 3.31) },
-            { name: 'BANK NIFTY', value: (latest.NIFTY_Close * 2.12).toFixed(0), change: `${niftyChg > 0 ? '+' : ''}${niftyChg}%`, isUp: niftyChg > 0, prices: last6.map(d => d.NIFTY_Close * 2.12) },
+            { name: 'SENSEX',     value: Math.round(sensexVal).toLocaleString('en-IN'), change: `${sensexChg > 0 ? '+' : ''}${sensexChg}%`, isUp: sensexChg > 0, prices: last6.map(d => d.SENSEX > 0 ? d.SENSEX : d.NIFTY_Close * 3.31) },
+            { name: 'BANK NIFTY', value: Math.round(bankNiftyVal).toLocaleString('en-IN'), change: `${bankNiftyChg > 0 ? '+' : ''}${bankNiftyChg}%`, isUp: bankNiftyChg > 0, prices: last6.map(d => d.BANK_NIFTY > 0 ? d.BANK_NIFTY : d.NIFTY_Close * 2.12) },
             { name: 'INDIA VIX',  value: latest.India_VIX.toFixed(2), change: `${vixChg > 0 ? '+' : ''}${vixChg}%`, isUp: vixChg < 0, prices: last6.map(d => d.India_VIX) },
             { name: 'USD/INR',    value: latest.USD_INR.toFixed(2),   change: `${usdChg > 0 ? '+' : ''}${usdChg}%`,  isUp: usdChg > 0,  prices: last6.map(d => d.USD_INR) },
             { name: 'GOLD',       value: latest.Gold.toFixed(0),       change: `${goldChg > 0 ? '+' : ''}${goldChg}%`, isUp: goldChg > 0, prices: last6.map(d => d.Gold) },

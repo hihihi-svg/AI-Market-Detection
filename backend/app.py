@@ -13,7 +13,6 @@ import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import datetime
-import random
 import yfinance as yf
 
 # ============================================================
@@ -392,18 +391,21 @@ def get_prediction():
     if feat is None:
         return jsonify({"error": "Feature pipeline unavailable"}), 500
 
-    preds, _ = run_inference(feat)
+    # Use raw model probabilities — no artificial jitter; the live feature vector already
+    # captures today's real market state, making each call genuinely dynamic
+    lr_prob = int(preds["lr_prob"])
+    rf_prob = int(preds["rf_prob"])
+    gb_prob = int(preds["gb_prob"])
 
-    # Small random volatility (±4 pp) to simulate a running live engine
-    lr_prob = min(max(int(preds["lr_prob"] + random.randint(-4, 4)), 10), 90)
-    rf_prob = min(max(int(preds["rf_prob"] + random.randint(-4, 4)), 10), 90)
-    gb_prob = min(max(int(preds["gb_prob"] + random.randint(-4, 4)), 10), 90)
-
-    final_prob      = int((lr_prob + rf_prob + gb_prob) / 3)
-    final_direction = "UP" if final_prob >= 50 else "DOWN"
+    # Majority vote determines direction (most robust against individual model bias)
     votes_up        = preds["lr_pred"] + preds["rf_pred"] + preds["gb_pred"]
+    final_direction = "UP" if votes_up >= 2 else "DOWN"
 
-    # Consensus label
+    # Average probability = directional confidence score (avg P(UP) across all 3 models)
+    avg_prob   = int((lr_prob + rf_prob + gb_prob) / 3)
+    final_prob = avg_prob   # returned as 'confidence' in the response
+
+    # Consensus label based on model vote count
     consensus = {3: "Strong Bullish", 2: "Bullish Bias", 1: "Bearish Bias", 0: "Strong Bearish"}[votes_up]
 
     # Live NIFTY price
@@ -600,6 +602,10 @@ def get_market_history():
         if len(nifty_h) == 0:
             raise ValueError("No historical price points found for index ^NSEI")
             
+        # Fetch SENSEX and BANK NIFTY live (all periods, since they're Indian indices)
+        sensex_h    = yf.Ticker("^BSESN").history(period=yf_period, interval=yf_interval)
+        banknifty_h = yf.Ticker("^NSEBANK").history(period=yf_period, interval=yf_interval)
+
         # Fetch macro data only for daily intervals (since intraday intervals don't align)
         if yf_interval == "1d":
             gold_h = yf.Ticker("GC=F").history(period=yf_period, interval="1d")
@@ -634,6 +640,8 @@ def get_market_history():
             data.append({
                 "Date":        date_str,
                 "NIFTY_Close": round(float(nifty_h["Close"].iloc[i]), 2),
+                "SENSEX":      safe_val(sensex_h, i, "Close", 0.0),
+                "BANK_NIFTY":  safe_val(banknifty_h, i, "Close", 0.0),
                 "Gold":        safe_val(gold_h, i, "Close", 2350.0),
                 "Oil":         safe_val(oil_h, i, "Close", 75.0),
                 "USD_INR":     safe_val(usd_h, i, "Close", 84.5),
@@ -658,9 +666,13 @@ def get_market_history():
             else:
                 dt = today - datetime.timedelta(days=(count - i))
                 date_str = dt.strftime("%Y-%m-%d")
+            # Use deterministic noise (no random import needed)
+            noise = float(np.sin(i * 0.7) * 80)
             data.append({
                 "Date":        date_str,
-                "NIFTY_Close": round(24000.0 + i * 15 + random.uniform(-80, 80), 2),
+                "NIFTY_Close": round(24000.0 + i * 15 + noise, 2),
+                "SENSEX":      round(79000.0 + i * 50 + noise * 3.3, 2),
+                "BANK_NIFTY":  round(51000.0 + i * 32 + noise * 2.1, 2),
                 "Gold":        2350.0,
                 "Oil":         75.0,
                 "USD_INR":     84.5,
